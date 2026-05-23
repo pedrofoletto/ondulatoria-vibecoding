@@ -771,7 +771,7 @@ function renderInterference(buf32, bw, bh, res) {
 
       if (N === 0) value = 0.5; 
       else {
-        if (showInstant || !animating) {
+        if (showInstant) {
           let sumCos = 0, sumSin = 0;
           for (let i = 0; i < N; i++) {
             const dx = wx - actives[i].x, dy = wy - actives[i].y;
@@ -819,7 +819,7 @@ function renderDoppler(buf32, bw, bh, res) {
       } else {
         const deff = (-M * X + Math.sqrt(X*X + denom * Y2)) / denom;
         // No Modo Seguro (showInstant = true), a fase é travada (k * deff) e forma o cone fixo se movendo
-        value = (Math.cos(showInstant || !animating ? (k * deff) : (k * deff - phaseT)) + 1) / 2;
+        value = (Math.cos(showInstant ? (k * deff) : (k * deff - phaseT)) + 1) / 2;
       }
       let idx = Math.floor(value * 255);
       if (idx < 0) idx = 0; else if (idx > 255) idx = 255;
@@ -848,7 +848,7 @@ function renderStandingWaves(p) {
   }
   p.stroke(255, 30); p.strokeWeight(1); p.line(startX, cy, startX + L, cy);
 
-  p.noFill(); const t = animating ? simTime * Math.PI * 4 : 0;
+  p.noFill(); const t = simTime * Math.PI * 4;
   
   p.strokeWeight(1); p.stroke(0, 210, 255, 60); p.drawingContext.setLineDash([5, 5]);
   p.beginShape();
