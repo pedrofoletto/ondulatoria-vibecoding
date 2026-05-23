@@ -361,6 +361,7 @@ let speakers = []; let nextSpkId = 1;
 let draggingSpk = null; let pressX = 0, pressY = 0;
 let heatBuf; let colorMap; let fpsArr = [];
 let bgPixel32 = 0xFF080605; 
+let dopplerSourceX = 0; // Sincronização global da posição Doppler
 
 // Doppler Observer
 let dopplerObs = { x: 0, y: 0 };
@@ -566,6 +567,19 @@ function applyGeom(type) {
   }
 }
 
+function escapeHTML(str) {
+  if (!str) return '';
+  return str.replace(/[&<>'"]/g, 
+    tag => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      "'": '&#39;',
+      '"': '&quot;'
+    }[tag] || tag)
+  );
+}
+
 function updateSpkName(id, newName) {
   const s = speakers.find(x => x.id === id); if (s) s.name = newName;
 }
@@ -580,7 +594,7 @@ function renderSpeakerList() {
       <div class="spk-top">
         <div class="spk-info">
           <div class="spk-dot"></div>
-          <input type="text" class="spk-name-input" value="${s.name}" onchange="updateSpkName(${s.id}, this.value)" />
+          <input type="text" class="spk-name-input" value="${escapeHTML(s.name)}" onchange="updateSpkName(${s.id}, this.value)" />
         </div>
         <div class="spk-actions">
           <input type="file" id="file-${s.id}" accept="audio/*" style="display:none" onchange="loadAudio(${s.id}, this.files[0])">
@@ -589,7 +603,7 @@ function renderSpeakerList() {
           <button class="btn-icon del" onclick="removeSpeaker(${s.id})">✖</button>
         </div>
       </div>
-      ${s.hasMusic ? `<div class="spk-audio-info">Tocando: ${s.fileName}</div>` : ''}
+      ${s.hasMusic ? `<div class="spk-audio-info">Tocando: ${escapeHTML(s.fileName)}</div>` : ''}
     `;
     container.appendChild(div);
   });
@@ -613,7 +627,10 @@ function toggleSpeaker(id) {
 }
 function removeSpeaker(id) {
   const s = speakers.find(x => x.id === id);
-  if (s && s.audioEl) { s.audioEl.pause(); s.audioEl = null; }
+  if (s) {
+    if (s.audioEl) { s.audioEl.pause(); s.audioEl = null; }
+    if (s.audioUrl) { URL.revokeObjectURL(s.audioUrl); s.audioUrl = null; }
+  }
   speakers = speakers.filter(x => x.id !== id);
   renderSpeakerList();
 }
@@ -659,8 +676,13 @@ function buildColorMap() {
 
   for (let i=0; i<=255; i++) {
     const [r,g,b] = valueToColor(i/255, params.theme);
-    if (isLittleEndian) colorMap[i] = (255<<24)|(b<<16)|(g<<8)|r;
-    else colorMap[i] = (r<<24)|(g<<16)|(b<<8)|255;
+    if (isLittleEndian) {
+      colorMap[i] = (255<<24)|(b<<16)|(g<<8)|r;
+      bgPixel32 = (255<<24)|(8<<16)|(6<<8)|5;
+    } else {
+      colorMap[i] = (r<<24)|(g<<16)|(b<<8)|255;
+      bgPixel32 = (5<<24)|(6<<16)|(8<<8)|255;
+    }
   }
 }
 
@@ -699,6 +721,10 @@ const sketch = (p) => {
       });
     }
 
+    if (activeTab === 'doppler') {
+      dopplerSourceX = (simTime * params.mach * 200) % (p.width + 200) - 100;
+    }
+
     if (activeTab === 'tubos') { p.background(5, 6, 8); renderStandingWaves(p); return; }
 
     const res = Math.max(1, params.res);
@@ -735,8 +761,15 @@ const sketch = (p) => {
     }
   };
   p.mouseDragged = () => { 
-    if (draggingSpk) { draggingSpk.x = p.mouseX; draggingSpk.y = p.mouseY; params.geomType = ''; } 
-    if (draggingObs) { dopplerObs.x = p.mouseX; dopplerObs.y = p.mouseY; }
+    if (draggingSpk) { 
+      draggingSpk.x = p.constrain(p.mouseX, 12, p.width - 12); 
+      draggingSpk.y = p.constrain(p.mouseY, 12, p.height - 12); 
+      params.geomType = ''; 
+    } 
+    if (draggingObs) { 
+      dopplerObs.x = p.constrain(p.mouseX, 8, p.width - 8); 
+      dopplerObs.y = p.constrain(p.mouseY, 8, p.height - 8); 
+    }
   };
   p.mouseReleased = () => {
     if(draggingSpk && p.dist(pressX, pressY, p.mouseX, p.mouseY) < 5) toggleSpeaker(draggingSpk.id);
@@ -807,7 +840,7 @@ function renderDoppler(buf32, bw, bh, res) {
   const M = params.mach; const cy = bh * res / 2;
   const k = (2 * Math.PI) / params.dlambda; const c = 200; 
   const phaseT = k * c * simTime; 
-  const sx = (simTime * M * c) % (bw * res + 200) - 100;
+  const sx = dopplerSourceX;
   for (let py = 0; py < bh; py++) {
     const Y = py * res - cy; const Y2 = Y * Y; const denom = 1 - M * M;
     for (let px = 0; px < bw; px++) {
@@ -938,7 +971,7 @@ function drawSpeakers(p) {
 }
 
 function drawDopplerSource(p) {
-  const sx = (simTime * params.mach * 200) % (p.width + 200) - 100;
+  const sx = dopplerSourceX;
   const cy = p.height / 2;
   
   // Fonte
@@ -983,8 +1016,9 @@ function drawDopplerSource(p) {
   p.fill(255); p.textAlign(p.CENTER, p.BOTTOM); p.textSize(12); p.textFont('JetBrains Mono');
   p.text("Observador", 0, -22);
   
-  p.fill(255, 200, 0); p.textAlign(p.CENTER, p.TOP); p.textSize(13); p.fontWeight = "bold";
+  p.fill(255, 200, 0); p.textAlign(p.CENTER, p.TOP); p.textSize(13); p.textStyle(p.BOLD);
   p.text(f_obs_text, 0, 12);
+  p.textStyle(p.NORMAL);
   
   // Linha de Visão (opcional)
   p.stroke(255, 255, 255, 40); p.strokeWeight(1); p.drawingContext.setLineDash([4, 4]);
