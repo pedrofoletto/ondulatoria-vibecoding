@@ -1,0 +1,998 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>ONDAS - Simulador Acústico</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.3/p5.min.js"></script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #050608;
+      --panel-bg:  rgba(15, 17, 26, 0.75);
+      --border:    rgba(255, 255, 255, 0.08);
+      --accent:    #00d2ff;
+      --accent2:   #3a7bd5;
+      --accent-glow: rgba(0, 210, 255, 0.5);
+      --green:     #10b981;
+      --red:       #ef4444;
+      --text:      #f8fafc;
+      --muted:     #94a3b8;
+    }
+
+    html, body {
+      height: 100%; background: var(--bg); color: var(--text);
+      font-family: 'Inter', sans-serif; font-size: 14px; overflow: hidden;
+    }
+
+    /* ── Splash Screen (Disclaimer) ──────────────────── */
+    #splash {
+      position: fixed; inset: 0; background: #000; z-index: 9999;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      transition: opacity 1s ease, visibility 1s ease;
+    }
+
+    /* ── Layout App ────────────────────────────────────────── */
+    #app { display: flex; flex-direction: row; height: 100vh; opacity: 0; transition: opacity 1s ease; }
+
+    #sidebar {
+      width: 360px; min-width: 360px; background: var(--panel-bg);
+      backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+      border-right: 1px solid var(--border); display: flex; flex-direction: column;
+      overflow-y: auto; padding: 20px; gap: 20px; z-index: 10;
+      box-shadow: 5px 0 30px rgba(0,0,0,0.5);
+    }
+
+    #sidebar::-webkit-scrollbar { width: 4px; }
+    #sidebar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+    .logo-area { display: flex; align-items: center; justify-content: space-between; }
+    .logo { display: flex; align-items: center; gap: 12px; }
+    .logo-icon {
+      width: 36px; height: 36px; background: linear-gradient(135deg, var(--accent), var(--accent2));
+      border-radius: 10px; display: flex; align-items: center; justify-content: center;
+      font-size: 18px; box-shadow: 0 4px 15px rgba(0, 210, 255, 0.3);
+    }
+    .logo-text { font-size: 18px; font-weight: 800; letter-spacing: 1px; }
+
+    /* ── Abas e Cards ───────────────────────────────────────── */
+    .tabs { display: flex; background: rgba(0,0,0,0.3); border-radius: 10px; padding: 4px; border: 1px solid var(--border); }
+    .tab {
+      flex: 1; padding: 8px 0; text-align: center; font-size: 12px; font-weight: 600;
+      color: var(--muted); border-radius: 6px; cursor: pointer; transition: all 0.2s;
+    }
+    .tab.active { background: rgba(255,255,255,0.1); color: var(--text); box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
+
+    .card {
+      background: rgba(255,255,255,0.02); border: 1px solid var(--border);
+      border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 14px;
+    }
+    .card-title { font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); margin-bottom: -4px; }
+
+    /* ── Caixas de Som ─────────────────────────── */
+    .speaker-list { display: flex; flex-direction: column; gap: 8px; }
+    .speaker-item {
+      display: flex; flex-direction: column; gap: 8px;
+      background: rgba(0,0,0,0.3); padding: 10px; border-radius: 8px;
+      border: 1px solid var(--border); transition: border-color 0.2s;
+    }
+    .speaker-item.active-spk { border-color: rgba(0, 210, 255, 0.4); }
+    .spk-top { display: flex; align-items: center; justify-content: space-between; }
+    .spk-info { display: flex; align-items: center; gap: 8px; }
+    .spk-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); transition: background 0.3s; }
+    .speaker-item.active-spk .spk-dot { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+    
+    .spk-name-input {
+      background: transparent; border: none; border-bottom: 1px solid rgba(255,255,255,0.2);
+      color: var(--text); font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 600;
+      width: 100px; padding: 2px; outline: none; transition: 0.2s;
+    }
+    .spk-name-input:focus { border-bottom-color: var(--accent); }
+
+    .spk-actions { display: flex; gap: 6px; }
+    .btn-icon { background: rgba(255,255,255,0.05); border: none; color: var(--text); padding: 6px; border-radius: 6px; cursor: pointer; font-size: 12px; transition: 0.2s; }
+    .btn-icon:hover { background: rgba(255,255,255,0.15); }
+    .btn-icon.del:hover { background: rgba(239, 68, 68, 0.2); color: var(--red); }
+    
+    .spk-audio-info { font-size: 11px; color: var(--accent); font-family: 'JetBrains Mono', monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .btn-add { background: rgba(0, 210, 255, 0.1); border: 1px dashed rgba(0, 210, 255, 0.4); color: var(--accent); padding: 10px; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 600; transition: all 0.2s; }
+    .btn-add:hover { background: rgba(0, 210, 255, 0.2); border-style: solid; }
+
+    /* ── Inputs ───────────────────────────────────── */
+    input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+    input[type=number] { -moz-appearance: textfield; }
+
+    .row { display: flex; flex-direction: column; gap: 6px; }
+    .row-header { display: flex; justify-content: space-between; align-items: center; }
+    .row-label { font-size: 13px; font-weight: 500; display: flex; align-items: center; gap: 6px; }
+    
+    .num-input {
+      width: 70px; background: rgba(0,0,0,0.4); border: 1px solid var(--border);
+      color: var(--text); font-family: 'JetBrains Mono', monospace; font-size: 12px;
+      padding: 4px 6px; border-radius: 6px; outline: none; text-align: right;
+    }
+    select.num-input { width: 100%; text-align: left; cursor: pointer; }
+    
+    input[type=range] { -webkit-appearance: none; width: 100%; height: 4px; border-radius: 4px; background: rgba(255,255,255,0.1); outline: none; }
+    input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%; background: #fff; cursor: pointer; box-shadow: 0 0 5px rgba(0,0,0,0.5); }
+
+    .btn-row { display: flex; gap: 6px; }
+    .btn {
+      flex: 1; padding: 8px 0; border: 1px solid var(--border); border-radius: 6px;
+      background: rgba(255,255,255,0.03); color: var(--text); font-size: 12px; font-weight: 600; cursor: pointer; transition: 0.2s;
+    }
+    .btn:hover { background: rgba(255,255,255,0.08); }
+    .btn.active { background: rgba(0, 210, 255, 0.15); border-color: var(--accent); color: var(--accent); }
+
+    /* ── Mobile & Responsive ────────────────────────────────── */
+    @media (max-width: 768px) {
+      #app { flex-direction: column-reverse; }
+      #sidebar { width: 100%; min-width: 100%; height: 50vh; border-right: none; border-top: 1px solid var(--border); }
+      #canvas-wrap { height: 50vh; flex: none; }
+    }
+
+    #canvas-wrap { flex: 1; display: flex; position: relative; background: #000; overflow: hidden; }
+    #canvas-wrap canvas { display: block; }
+    #fps-badge, #info-badge {
+      position: absolute; font-size: 11px; background: rgba(0,0,0,0.6); padding: 4px 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); pointer-events: none; z-index: 10;
+    }
+    #fps-badge { top: 12px; right: 12px; font-family: 'JetBrains Mono', monospace; color: var(--green); font-weight: 700; }
+    #info-badge { bottom: 12px; right: 12px; color: rgba(255,255,255,0.8); }
+
+    .panel { display: none; flex-direction: column; gap: 16px; }
+    .panel.active { display: flex; animation: fadePanel 0.3s ease; }
+    @keyframes fadePanel { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: translateX(0); } }
+
+  </style>
+</head>
+<body>
+
+<!-- SPLASH SCREEN & DISCLAIMER -->
+<div id="splash">
+  <div id="disclaimer-box" class="card" style="max-width: 500px; text-align: center; border-color: rgba(239, 68, 68, 0.4); box-shadow: 0 0 50px rgba(239, 68, 68, 0.15); z-index: 10; background: #0f111a;">
+    <div class="card-title" style="color: #ef4444; font-size: 18px; margin-bottom: 12px;">⚠️ Aviso de Fotossensibilidade</div>
+    <p style="color: var(--text); font-size: 15px; line-height: 1.6; margin-bottom: 24px; padding: 0 10px;">
+      Este simulador contém luzes piscantes intensas, efeitos estroboscópicos de ondas e padrões de alto contraste que podem causar desconforto visual ou desencadear convulsões em pessoas com <b>epilepsia fotossensível</b>.
+    </p>
+    <div style="display: flex; flex-direction: column; gap: 12px;">
+      <button class="btn" style="background: rgba(16, 185, 129, 0.15); border-color: var(--green); color: var(--green); font-size: 15px; padding: 14px;" onclick="startSafeMode()">🛡️ Entrar no Modo Seguro (Sem Piscar)</button>
+      <button class="btn" style="background: rgba(0, 210, 255, 0.15); border-color: var(--accent); color: var(--accent); font-size: 15px; padding: 14px;" onclick="showRaveIntro()">⚡ Entrar no Modo Rave (Com Flashes)</button>
+    </div>
+  </div>
+</div>
+
+<!-- APP PRINCIPAL -->
+<div id="app">
+  <aside id="sidebar">
+    <div class="logo-area">
+      <div class="logo">
+        <div class="logo-icon">🌊</div>
+        <div>
+          <div class="logo-text">ONDAS</div>
+          <div style="font-size: 11px; color: var(--muted); margin-top: 2px;">Simulador Acústico</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Abas Menores -->
+    <div class="tabs" id="top-tabs">
+      <div class="tab active" onclick="setTab('interf')" id="tab-interf">Interferência</div>
+      <div class="tab" onclick="setTab('doppler')" id="tab-doppler">Doppler</div>
+      <div class="tab" onclick="setTab('tubos')" id="tab-tubos">Tubos</div>
+    </div>
+
+    <!-- Botões Globais -->
+    <div class="btn-row" style="margin-top: -5px; margin-bottom: 5px;">
+      <button class="btn active" id="btn-anim" onclick="toggleAnim()">⏸ Pausar</button>
+      <button class="btn" id="btn-mode" onclick="toggleMode()">🌊 Instantâneo</button>
+    </div>
+
+    <!-- PAINEL: INTERFERÊNCIA -->
+    <div id="panel-interf" class="panel active">
+      <div class="card">
+        <div class="card-title">🎧 Fontes (Arraste p/ mover)</div>
+        <div class="speaker-list" id="spk-list"></div>
+        <button class="btn-add" onclick="addSpeaker()">+ Nova Fonte</button>
+      </div>
+
+      <div class="card">
+        <div class="card-title">📐 Arranjos Prontos</div>
+        <div class="row">
+          <div class="row-header">
+            <span class="row-label">Distância Geométrica (D)</span>
+            <input type="number" class="num-input" id="num-geomdist" value="150" min="50" max="400" />
+          </div>
+          <input type="range" id="sl-geomdist" min="50" max="400" value="150" />
+        </div>
+        <div class="btn-row" style="margin-top:4px;">
+          <button class="btn" onclick="applyGeom('line')">Linha</button>
+          <button class="btn" onclick="applyGeom('tri')">Triângulo</button>
+          <button class="btn" onclick="applyGeom('quad')">Quadrado</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">⚙ Parâmetros Globais</div>
+        <div class="row">
+          <div class="row-header">
+            <span class="row-label">Comp. de Onda (λ)</span>
+            <input type="number" class="num-input" id="num-lambda" value="80" min="20" max="400" />
+          </div>
+          <input type="range" id="sl-lambda" min="20" max="400" value="80" />
+        </div>
+        <div class="row">
+          <div class="row-header">
+            <span class="row-label">Velocidade Simulação</span>
+            <input type="number" class="num-input" id="num-freq" value="1.0" min="0.1" max="5.0" step="0.1" />
+          </div>
+          <input type="range" id="sl-freq" min="0.1" max="5.0" value="1.0" step="0.1" />
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">🎯 Círculo de Observação</div>
+        <div class="row" style="flex-direction:row; justify-content:space-between; align-items:center;">
+          <span class="row-label">Ativar Círculo</span>
+          <input type="checkbox" id="chk-obs" onchange="params.obsCircle = this.checked" />
+        </div>
+        <div class="row">
+          <div class="row-header">
+            <span class="row-label">Raio do Círculo</span>
+            <input type="number" class="num-input" id="num-obsrad" value="250" min="50" max="1000" />
+          </div>
+          <input type="range" id="sl-obsrad" min="50" max="1000" value="250" />
+        </div>
+      </div>
+    </div>
+
+    <!-- PAINEL: DOPPLER -->
+    <div id="panel-doppler" class="panel">
+      <div class="card" style="border-color: rgba(139, 92, 246, 0.4);">
+        <div class="card-title" style="color: #8b5cf6;">🚀 Fonte Móvel</div>
+        <div class="row">
+          <div class="row-header">
+            <span class="row-label">Velocidade Mach</span>
+            <input type="number" class="num-input" id="num-mach" value="0.5" min="0.0" max="0.95" step="0.05" />
+          </div>
+          <input type="range" id="sl-mach" min="0.0" max="0.95" value="0.5" step="0.05" />
+        </div>
+        <div class="row" style="margin-top:10px;">
+          <div class="row-header">
+            <span class="row-label">Comp. de Onda Base</span>
+            <input type="number" class="num-input" id="num-dlambda" value="60" min="20" max="200" />
+          </div>
+          <input type="range" id="sl-dlambda" min="20" max="200" value="60" />
+        </div>
+        <p style="font-size:12px; color:var(--muted); margin-top:10px;">Arraste o Observador (ponto vermelho) no Canvas para medir a Frequência Aparente (f').</p>
+      </div>
+    </div>
+
+    <!-- PAINEL: TUBOS -->
+    <div id="panel-tubos" class="panel">
+      <div class="card" style="border-color: rgba(234, 179, 8, 0.4);">
+        <div class="card-title" style="color: #eab308;">🎵 Ondas Estacionárias</div>
+        <p style="font-size:12px; color:var(--muted); line-height:1.4;">Simulação de ressonância da pressão do ar dentro de um tubo.</p>
+        
+        <div class="row">
+          <div class="row-header"><span class="row-label">Tipo de Tubo</span></div>
+          <select class="num-input" id="sel-tubo-type" onchange="params.tuboType = this.value; checkHarmonicLimit();">
+            <option value="AA">Aberto nas 2 pontas (AA)</option>
+            <option value="AF">Aberto e Fechado (AF)</option>
+          </select>
+        </div>
+
+        <div class="row">
+          <div class="row-header">
+            <span class="row-label">Comprimento do Tubo</span>
+            <input type="number" class="num-input" id="num-tubolen" value="300" min="100" max="600" />
+          </div>
+          <input type="range" id="sl-tubolen" min="100" max="600" value="300" />
+        </div>
+        
+        <div class="row" style="margin-top:10px; border-top: 1px solid var(--border); padding-top: 10px;">
+          <div class="row-header">
+            <span class="row-label">Harmônico (n)</span>
+            <input type="number" class="num-input" id="num-harm" value="1" min="1" max="15" step="1" />
+          </div>
+          <input type="range" id="sl-harm" min="1" max="15" value="1" step="1" />
+        </div>
+        
+        <div class="row" style="margin-top:10px; border-top: 1px solid var(--border); padding-top: 10px;">
+          <div class="row-header">
+            <span class="row-label" style="color: var(--accent);">Comp. de Onda Gerado (λ)</span>
+            <input type="text" class="num-input" id="num-tubolambda" value="600.0" disabled style="background: rgba(0,210,255,0.1); color: var(--accent); border-color: transparent;" />
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- COMUM -->
+    <div class="card">
+      <div class="card-title">🎨 Configurações de View</div>
+      <div class="row">
+        <div class="row-header"><span class="row-label">Esquema de Cores</span></div>
+        <select class="num-input" id="sel-theme" onchange="updateTheme()">
+          <option value="ncs">NCS Blue</option>
+          <option value="neon">Neon Cyberpunk</option>
+          <option value="classic">Classic Heatmap</option>
+          <option value="mono">Monochrome</option>
+        </select>
+      </div>
+      <div class="row" style="margin-top:4px;">
+        <div class="row-header">
+          <span class="row-label">Resolução (1=Max)</span>
+          <input type="number" class="num-input" id="num-res" value="5" min="1" max="10" />
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <main id="canvas-wrap">
+    <div id="fps-badge">60 FPS</div>
+    <div id="info-badge">Arraste as caixas para reposicionar (Aperte Espaço para Pausar)</div>
+
+    <!-- Alerta Fotossensibilidade exclusivo do Doppler no Modo Seguro -->
+    <div id="doppler-warning" class="card" style="display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); max-width: 400px; text-align: center; border-color: rgba(234, 179, 8, 0.4); z-index: 20; background: #0f111a; box-shadow: 0 0 40px rgba(0,0,0,0.8);">
+      <div class="card-title" style="color: #eab308; font-size: 16px; margin-bottom: 12px;">⚠️ Atenção: Padrões Móveis</div>
+      <p style="color: var(--text); font-size: 14px; line-height: 1.5; margin-bottom: 20px;">
+        A animação do <b>Efeito Doppler</b> envolve padrões em movimento contínuo pelo espaço. Embora as luzes estroboscópicas estejam desligadas neste modo, o movimento direcional denso ainda pode causar incômodo em alguns perfis de fotossensibilidade.<br><br>
+        <i>A simulação foi pausada por segurança para evitar movimentos abruptos.</i>
+      </p>
+      <button class="btn" style="background: rgba(234, 179, 8, 0.2); border-color: #eab308; color: #eab308; font-size: 14px; padding: 12px;" onclick="dismissDopplerWarning()">Estou ciente, liberar painel</button>
+    </div>
+  </main>
+</div>
+
+<script>
+// ── Estado Global ────────────────────────────────────────────────────────────
+let activeTab = 'interf'; 
+let params = {
+  safeMode: false,
+  lambda: 80, freq: 1.0, res: 5, mach: 0.5, dlambda: 60,
+  theme: 'ncs', tuboType: 'AA', harm: 1, tubolen: 300,
+  geomDist: 150, geomType: '', obsCircle: false, obsRad: 250
+};
+let animating = true; let showInstant = false; let simTime = 0;
+let speakers = []; let nextSpkId = 1;
+let draggingSpk = null; let pressX = 0, pressY = 0;
+let heatBuf; let colorMap; let fpsArr = [];
+let bgPixel32 = 0xFF080605; 
+
+// Doppler Observer
+let dopplerObs = { x: 0, y: 0 };
+let draggingObs = false;
+let dopplerWarned = false; // Controle de aviso de segurança do Doppler
+
+// ── Audio Context ────────────────────────────────────────────
+let audioCtx = null;
+function initAudio() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+}
+
+function loadAudio(id, file) {
+  if (!file) return;
+  initAudio();
+  const s = speakers.find(x => x.id === id);
+  if (!s) return;
+  
+  if (s.audioUrl) URL.revokeObjectURL(s.audioUrl);
+  s.audioUrl = URL.createObjectURL(file);
+  
+  if (s.audioEl) s.audioEl.pause();
+  s.audioEl = new Audio(s.audioUrl);
+  s.audioEl.loop = true;
+  
+  if (!s.sourceNode) {
+    s.sourceNode = audioCtx.createMediaElementSource(s.audioEl);
+    s.analyser = audioCtx.createAnalyser();
+    s.analyser.fftSize = 256;
+    s.freqData = new Uint8Array(s.analyser.frequencyBinCount);
+    s.sourceNode.connect(s.analyser);
+    s.analyser.connect(audioCtx.destination);
+    s.history = new Float32Array(300);
+    s.histPtr = 0;
+  }
+  
+  s.audioEl.play();
+  s.hasMusic = true; s.fileName = file.name; s.active = true;
+  renderSpeakerList();
+}
+
+// ── Modos Iniciais (Direto para o App) ───────────────────────────────────────
+function startSafeMode() {
+  params.safeMode = true;
+  showInstant = true; // Trava na Intensidade Média
+  
+  document.getElementById('btn-mode').style.display = 'none';
+  document.getElementById('btn-anim').style.flex = '1';
+
+  // Limites gerais muito mais restritos para segurança total
+  const numFreq = document.getElementById('num-freq');
+  const slFreq = document.getElementById('sl-freq');
+  numFreq.max = 0.5; slFreq.max = 0.5;
+  if(params.freq > 0.5) { params.freq = 0.5; numFreq.value = 0.5; slFreq.value = 0.5; }
+
+  // Restringe extremos no Doppler
+  const numDlambda = document.getElementById('num-dlambda');
+  const slDlambda = document.getElementById('sl-dlambda');
+  numDlambda.min = 80; slDlambda.min = 80; // Ondas grossas previnem "aliasing" na tela
+  if(params.dlambda < 80) { params.dlambda = 80; numDlambda.value = 80; slDlambda.value = 80; }
+
+  document.getElementById('splash').style.opacity = '0';
+  setTimeout(() => {
+    document.getElementById('splash').style.display = 'none';
+    document.getElementById('app').style.opacity = '1';
+  }, 500);
+  
+  initAudio();
+}
+
+function showRaveIntro() {
+  // Entra direto no app, sem Intro/WarpSpeed (removido a pedido para simplificar UX)
+  document.getElementById('splash').style.opacity = '0';
+  setTimeout(() => {
+    document.getElementById('splash').style.display = 'none';
+    document.getElementById('app').style.opacity = '1';
+  }, 500);
+  initAudio();
+}
+
+function dismissDopplerWarning() {
+  dopplerWarned = true;
+  document.getElementById('doppler-warning').style.display = 'none';
+}
+
+// Atalho Teclado (Barra de Espaço = Pause/Play)
+document.addEventListener('keydown', (e) => {
+  if (e.code === 'Space' && e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
+    e.preventDefault();
+    toggleAnim();
+  }
+});
+
+// ── Funções de UI ────────────────────────────────────────────────────────────
+function setTab(tab) {
+  activeTab = tab;
+  ['interf', 'doppler', 'tubos'].forEach(t => {
+    document.getElementById('tab-'+t).classList.toggle('active', tab === t);
+    document.getElementById('panel-'+t).classList.toggle('active', tab === t);
+  });
+  
+  const b = document.getElementById('info-badge');
+  if(tab === 'interf') b.textContent = "Interferência: Arraste as fontes (Aperte Espaço para Pausar)";
+  else if(tab === 'doppler') b.textContent = "Doppler: Arraste o Observador (Aperte Espaço para Pausar)";
+  else b.textContent = "Tubos Sonoros: Modo 1D (Ondas Estacionárias)";
+
+  // Controle de segurança da aba Doppler no Modo Seguro
+  if (tab === 'doppler' && params.safeMode) {
+    if (animating) toggleAnim(); // Pausa automaticamente ao entrar
+    if (!dopplerWarned) document.getElementById('doppler-warning').style.display = 'block';
+  } else {
+    document.getElementById('doppler-warning').style.display = 'none';
+  }
+}
+
+function bindControl(idPrefix, key, type = 'float', callback = null) {
+  const sl = document.getElementById('sl-' + idPrefix);
+  const num = document.getElementById('num-' + idPrefix);
+  if(!sl || !num) return;
+  const updateVal = (val) => {
+    let parsed = type === 'int' ? parseInt(val) : parseFloat(val);
+    if (isNaN(parsed)) return;
+    params[key] = parsed;
+    sl.value = parsed; num.value = parsed;
+    if(callback) callback();
+  };
+  sl.addEventListener('input', (e) => updateVal(e.target.value));
+  num.addEventListener('input', (e) => updateVal(e.target.value));
+}
+bindControl('lambda', 'lambda', 'int');
+bindControl('freq', 'freq', 'float');
+bindControl('res', 'res', 'int');
+bindControl('mach', 'mach', 'float');
+bindControl('dlambda', 'dlambda', 'int');
+bindControl('tubolen', 'tubolen', 'int', updateTuboLambda);
+bindControl('obsrad', 'obsRad', 'int');
+bindControl('geomdist', 'geomDist', 'int', () => { applyGeom(params.geomType); });
+bindControl('harm', 'harm', 'int', () => { checkHarmonicLimit(true); });
+
+function updateTuboLambda() {
+  const isFechado = (params.tuboType === 'AF');
+  let lambda = isFechado ? (4 * params.tubolen) / params.harm : (2 * params.tubolen) / params.harm;
+  const el = document.getElementById('num-tubolambda');
+  if (el) el.value = lambda.toFixed(1);
+}
+
+function checkHarmonicLimit(fromInput = false) {
+  const isFechado = (params.tuboType === 'AF');
+  const num = document.getElementById('num-harm');
+  const sl = document.getElementById('sl-harm');
+  
+  if (isFechado) {
+    num.step = 2; sl.step = 2;
+    if (params.harm % 2 === 0) {
+      params.harm = fromInput ? params.harm + 1 : params.harm - 1;
+      if (params.harm < 1) params.harm = 1;
+      num.value = params.harm; sl.value = params.harm;
+    }
+  } else {
+    num.step = 1; sl.step = 1;
+  }
+  updateTuboLambda();
+}
+
+function toggleAnim() {
+  // Impede de despausar se a tela de aviso de segurança do doppler estiver aparecendo
+  if (document.getElementById('doppler-warning').style.display === 'block') return;
+  
+  animating = !animating;
+  const btn = document.getElementById('btn-anim');
+  if (animating) { btn.textContent = '⏸ Pausar'; btn.classList.add('active'); } 
+  else { btn.textContent = '▶ Animar'; btn.classList.remove('active'); }
+}
+function toggleMode() {
+  if (params.safeMode) return; // Travado se for safe mode
+  showInstant = !showInstant;
+  const btn = document.getElementById('btn-mode');
+  if (showInstant) { btn.textContent = '📊 Intensidade Média'; btn.classList.add('active'); } 
+  else { btn.textContent = '🌊 Instantâneo'; btn.classList.remove('active'); }
+}
+
+// ── Arranjos e Caixas ────────────────────────────────────────────────────────
+function applyGeom(type) {
+  if (!type) return;
+  params.geomType = type;
+  speakers.forEach(s => { if(s.audioUrl) URL.revokeObjectURL(s.audioUrl); if(s.audioEl) s.audioEl.pause(); });
+  speakers = []; nextSpkId = 1;
+  
+  const wrap = document.getElementById('canvas-wrap');
+  const cx = wrap.clientWidth / 2; const cy = wrap.clientHeight / 2;
+  const d = params.geomDist;
+  
+  if(type === 'line') {
+    addSpeaker(cx - d/2, cy); addSpeaker(cx + d/2, cy);
+  } else if (type === 'tri') {
+    addSpeaker(cx, cy - (d * Math.sqrt(3)/3));
+    addSpeaker(cx - d/2, cy + (d * Math.sqrt(3)/6));
+    addSpeaker(cx + d/2, cy + (d * Math.sqrt(3)/6));
+  } else if (type === 'quad') {
+    addSpeaker(cx - d/2, cy - d/2); addSpeaker(cx + d/2, cy - d/2);
+    addSpeaker(cx - d/2, cy + d/2); addSpeaker(cx + d/2, cy + d/2);
+  }
+}
+
+function updateSpkName(id, newName) {
+  const s = speakers.find(x => x.id === id); if (s) s.name = newName;
+}
+
+function renderSpeakerList() {
+  const container = document.getElementById('spk-list');
+  container.innerHTML = '';
+  speakers.forEach(s => {
+    const div = document.createElement('div');
+    div.className = `speaker-item ${s.active ? 'active-spk' : ''}`;
+    div.innerHTML = `
+      <div class="spk-top">
+        <div class="spk-info">
+          <div class="spk-dot"></div>
+          <input type="text" class="spk-name-input" value="${s.name}" onchange="updateSpkName(${s.id}, this.value)" />
+        </div>
+        <div class="spk-actions">
+          <input type="file" id="file-${s.id}" accept="audio/*" style="display:none" onchange="loadAudio(${s.id}, this.files[0])">
+          <button class="btn-icon" onclick="document.getElementById('file-${s.id}').click()" title="Música">🎵</button>
+          <button class="btn-icon" onclick="toggleSpeaker(${s.id})">${s.active ? '🔊' : '🔇'}</button>
+          <button class="btn-icon del" onclick="removeSpeaker(${s.id})">✖</button>
+        </div>
+      </div>
+      ${s.hasMusic ? `<div class="spk-audio-info">Tocando: ${s.fileName}</div>` : ''}
+    `;
+    container.appendChild(div);
+  });
+}
+
+function addSpeaker(x, y, active=true) {
+  const wrap = document.getElementById('canvas-wrap');
+  if(typeof x !== 'number') x = (wrap.clientWidth/2) + (Math.random()*100 - 50);
+  if(typeof y !== 'number') y = (wrap.clientHeight/2) + (Math.random()*100 - 50);
+  speakers.push({ id: nextSpkId, name: `Fonte ${nextSpkId}`, x, y, active, hasMusic: false });
+  nextSpkId++; renderSpeakerList();
+}
+
+function toggleSpeaker(id) {
+  const s = speakers.find(x => x.id === id);
+  if (s) {
+    s.active = !s.active;
+    if (s.hasMusic && s.audioEl) { if (s.active) s.audioEl.play(); else s.audioEl.pause(); }
+  }
+  renderSpeakerList();
+}
+function removeSpeaker(id) {
+  const s = speakers.find(x => x.id === id);
+  if (s && s.audioEl) { s.audioEl.pause(); s.audioEl = null; }
+  speakers = speakers.filter(x => x.id !== id);
+  renderSpeakerList();
+}
+
+// Inicia com 2 caixas (Fallback inicial)
+addSpeaker(window.innerWidth/2 - 80, window.innerHeight/2, true);
+addSpeaker(window.innerWidth/2 + 80, window.innerHeight/2, true);
+
+// ── Temas de Cores ───────────────────────────────────────────────────────────
+function updateTheme() {
+  params.theme = document.getElementById('sel-theme').value;
+  buildColorMap();
+}
+
+function valueToColor(v, theme) {
+  let stops = [];
+  if (theme === 'ncs') stops = [ [0, [0,0,0]], [0.3, [0,20,50]], [0.5, [0,50,150]], [0.75, [0,180,255]], [1, [255,255,255]] ];
+  else if (theme === 'neon') stops = [ [0, [0,0,0]], [0.3, [60,0,60]], [0.5, [150,0,150]], [0.8, [255,0,255]], [1, [0,255,255]] ];
+  else if (theme === 'mono') stops = [ [0, [0,0,0]], [0.5, [127,127,127]], [1, [255,255,255]] ];
+  else stops = [ [0, [0,0,0]], [0.15, [10,5,40]], [0.3, [20,30,120]], [0.5, [15,17,26]], [0.7, [16,185,129]], [0.85, [255,200,0]], [1, [255,255,255]] ];
+  
+  v = Math.max(0, Math.min(1, v));
+  for (let i=0; i<stops.length-1; i++) {
+    if (v >= stops[i][0] && v <= stops[i+1][0]) {
+      const f = (v - stops[i][0]) / (stops[i+1][0] - stops[i][0]);
+      return [
+        Math.round(stops[i][1][0] + f*(stops[i+1][1][0]-stops[i][1][0])),
+        Math.round(stops[i][1][1] + f*(stops[i+1][1][1]-stops[i][1][1])),
+        Math.round(stops[i][1][2] + f*(stops[i+1][1][2]-stops[i][1][2]))
+      ];
+    }
+  }
+  return [255,255,255];
+}
+
+function buildColorMap() {
+  if(!colorMap) colorMap = new Uint32Array(256);
+  const buffer = new ArrayBuffer(4);
+  const view8 = new Uint8ClampedArray(buffer);
+  const view32 = new Uint32Array(buffer);
+  view32[0] = 0x01020304;
+  const isLittleEndian = (view8[0] === 0x04);
+
+  for (let i=0; i<=255; i++) {
+    const [r,g,b] = valueToColor(i/255, params.theme);
+    if (isLittleEndian) colorMap[i] = (255<<24)|(b<<16)|(g<<8)|r;
+    else colorMap[i] = (r<<24)|(g<<16)|(b<<8)|255;
+  }
+}
+
+// ── P5.JS SKETCH ─────────────────────────────────────────────────────────────
+const sketch = (p) => {
+  p.setup = () => {
+    const wrap = document.getElementById('canvas-wrap');
+    const w = wrap.clientWidth > 0 ? wrap.clientWidth : window.innerWidth - 360;
+    const h = wrap.clientHeight > 0 ? wrap.clientHeight : window.innerHeight;
+    const cnv  = p.createCanvas(w, h);
+    cnv.parent('canvas-wrap');
+    p.colorMode(p.RGB, 255); p.frameRate(60);
+    buildColorMap();
+
+    // Posiciona o observador Doppler do lado direito
+    dopplerObs.x = p.width * 0.7;
+    dopplerObs.y = p.height / 2;
+  };
+
+  p.draw = () => {
+    if (animating) simTime += p.deltaTime / 1000;
+
+    fpsArr.push(p.frameRate()); if (fpsArr.length > 20) fpsArr.shift();
+    document.getElementById('fps-badge').textContent = Math.round(fpsArr.reduce((a,b)=>a+b,0)/fpsArr.length) + ' FPS';
+
+    if (animating && activeTab === 'interf') {
+      speakers.forEach(s => {
+        if (s.hasMusic && s.active) {
+          s.analyser.getByteFrequencyData(s.freqData);
+          let sum = 0; for(let i=0; i<s.freqData.length; i++) sum += s.freqData[i];
+          s.history[s.histPtr] = sum / (s.freqData.length * 255);
+          s.histPtr = (s.histPtr + 1) % 300;
+        } else if (s.history) {
+          s.history[s.histPtr] = 0.5; s.histPtr = (s.histPtr + 1) % 300;
+        }
+      });
+    }
+
+    if (activeTab === 'tubos') { p.background(5, 6, 8); renderStandingWaves(p); return; }
+
+    const res = Math.max(1, params.res);
+    const dw = Math.ceil(p.width / res);
+    const dh = Math.ceil(p.height / res);
+
+    if (!heatBuf || heatBuf.width !== dw || heatBuf.height !== dh) {
+      if (heatBuf) heatBuf.remove();
+      heatBuf = p.createGraphics(dw, dh); heatBuf.pixelDensity(1);
+    }
+
+    heatBuf.loadPixels();
+    const buf32 = new Uint32Array(heatBuf.pixels.buffer);
+    
+    if (activeTab === 'interf') renderInterference(buf32, heatBuf.width, heatBuf.height, res);
+    else if (activeTab === 'doppler') renderDoppler(buf32, heatBuf.width, heatBuf.height, res);
+
+    heatBuf.updatePixels();
+    p.background(5, 6, 8);
+    p.image(heatBuf, 0, 0, p.width, p.height);
+
+    if (activeTab === 'interf') drawSpeakers(p);
+    else if (activeTab === 'doppler') drawDopplerSource(p);
+  };
+
+  p.mousePressed = () => {
+    pressX = p.mouseX; pressY = p.mouseY;
+    if (activeTab === 'interf') {
+      for (let i = speakers.length - 1; i >= 0; i--) {
+        if (p.dist(p.mouseX, p.mouseY, speakers[i].x, speakers[i].y) < 20) { draggingSpk = speakers[i]; break; }
+      }
+    } else if (activeTab === 'doppler') {
+      if (p.dist(p.mouseX, p.mouseY, dopplerObs.x, dopplerObs.y) < 25) draggingObs = true;
+    }
+  };
+  p.mouseDragged = () => { 
+    if (draggingSpk) { draggingSpk.x = p.mouseX; draggingSpk.y = p.mouseY; params.geomType = ''; } 
+    if (draggingObs) { dopplerObs.x = p.mouseX; dopplerObs.y = p.mouseY; }
+  };
+  p.mouseReleased = () => {
+    if(draggingSpk && p.dist(pressX, pressY, p.mouseX, p.mouseY) < 5) toggleSpeaker(draggingSpk.id);
+    draggingSpk = null; draggingObs = false;
+  };
+  p.windowResized = () => {
+    const wrap = document.getElementById('canvas-wrap');
+    if (wrap.clientWidth > 0 && wrap.clientHeight > 0) p.resizeCanvas(wrap.clientWidth, wrap.clientHeight);
+    if (heatBuf) { heatBuf.remove(); heatBuf = null; }
+  };
+};
+
+function renderInterference(buf32, bw, bh, res) {
+  const actives = speakers.filter(s => s.active);
+  const N = actives.length;
+  const k = (2 * Math.PI) / params.lambda;
+  const phaseT = (2 * Math.PI * params.freq) * simTime;
+  const speedPerFrame = (params.lambda * params.freq) / 60;
+
+  const cx = bw / 2; const cy = bh / 2;
+  const obsRadSq = (params.obsRad / res) * (params.obsRad / res);
+
+  for (let py = 0; py < bh; py++) {
+    const wy = py * res;
+    for (let px = 0; px < bw; px++) {
+      if (params.obsCircle) {
+        if ((px - cx)*(px - cx) + (py - cy)*(py - cy) > obsRadSq) {
+          buf32[py * bw + px] = bgPixel32; continue;
+        }
+      }
+      const wx = px * res; let value = 0;
+
+      if (N === 0) value = 0.5; 
+      else {
+        if (showInstant || !animating) {
+          let sumCos = 0, sumSin = 0;
+          for (let i = 0; i < N; i++) {
+            const dx = wx - actives[i].x, dy = wy - actives[i].y;
+            const d = Math.sqrt(dx*dx + dy*dy);
+            sumCos += Math.cos(k * d); sumSin += Math.sin(k * d);
+          }
+          value = (sumCos*sumCos + sumSin*sumSin) / (N * N);
+        } else {
+          let amp = 0;
+          for (let i = 0; i < N; i++) {
+            const s = actives[i];
+            const dx = wx - s.x, dy = wy - s.y;
+            const d = Math.sqrt(dx*dx + dy*dy);
+            let musicMod = 1.0;
+            if (s.hasMusic && s.history) {
+              let delayFrames = Math.floor(d / speedPerFrame);
+              let idx = Math.floor(s.histPtr - 1 - Math.min(delayFrames, 299) + 300) % 300;
+              musicMod = s.history[idx] * 2.0;
+            }
+            amp += musicMod * Math.cos(k * d - phaseT);
+          }
+          value = (amp + N) / (2 * N);
+        }
+      }
+      let idx = Math.floor(value * 255);
+      if (idx < 0) idx = 0; else if (idx > 255) idx = 255;
+      buf32[py * bw + px] = colorMap[idx];
+    }
+  }
+}
+
+function renderDoppler(buf32, bw, bh, res) {
+  const M = params.mach; const cy = bh * res / 2;
+  const k = (2 * Math.PI) / params.dlambda; const c = 200; 
+  const phaseT = k * c * simTime; 
+  const sx = (simTime * M * c) % (bw * res + 200) - 100;
+  for (let py = 0; py < bh; py++) {
+    const Y = py * res - cy; const Y2 = Y * Y; const denom = 1 - M * M;
+    for (let px = 0; px < bw; px++) {
+      const X = px * res - sx; let value = 0.5;
+      if (M >= 1.0) {
+        const insideRoot = X*X - (M*M - 1)*Y2;
+        if (X < 0 && insideRoot >= 0) value = (Math.cos(k * Math.sqrt(X*X + Y2) - phaseT) + 1)/2;
+        else value = 0;
+      } else {
+        const deff = (-M * X + Math.sqrt(X*X + denom * Y2)) / denom;
+        // No Modo Seguro (showInstant = true), a fase é travada (k * deff) e forma o cone fixo se movendo
+        value = (Math.cos(showInstant || !animating ? (k * deff) : (k * deff - phaseT)) + 1) / 2;
+      }
+      let idx = Math.floor(value * 255);
+      if (idx < 0) idx = 0; else if (idx > 255) idx = 255;
+      buf32[py * bw + px] = colorMap[idx];
+    }
+  }
+}
+
+function renderStandingWaves(p) {
+  const L = params.tubolen; const type = params.tuboType; 
+  const cy = p.height / 2; const cx = p.width / 2; const startX = cx - L/2;
+  
+  const getEnv = (x) => {
+    const n = params.harm;
+    return Math.sin(type === 'AA' ? (n * Math.PI * x)/L : ((n * Math.PI * x)/(2*L)));
+  };
+  
+  p.strokeWeight(4); p.stroke(100); p.noFill();
+  p.line(startX, cy - 60, startX + L, cy - 60); p.line(startX, cy + 60, startX + L, cy + 60);
+  p.stroke(255, 50); p.strokeWeight(2); p.line(startX, cy - 60, startX, cy + 60); 
+  
+  if (type === 'AF') {
+    p.stroke(200); p.strokeWeight(6); p.line(startX + L, cy - 60, startX + L, cy + 60);
+  } else {
+    p.stroke(255, 50); p.strokeWeight(2); p.line(startX + L, cy - 60, startX + L, cy + 60);
+  }
+  p.stroke(255, 30); p.strokeWeight(1); p.line(startX, cy, startX + L, cy);
+
+  p.noFill(); const t = animating ? simTime * Math.PI * 4 : 0;
+  
+  p.strokeWeight(1); p.stroke(0, 210, 255, 60); p.drawingContext.setLineDash([5, 5]);
+  p.beginShape();
+  for(let x=0; x<=L; x+=2) p.vertex(startX + x, cy + getEnv(x) * 50);
+  p.endShape();
+  p.beginShape();
+  for(let x=0; x<=L; x+=2) p.vertex(startX + x, cy - getEnv(x) * 50);
+  p.endShape();
+  p.drawingContext.setLineDash([]);
+
+  p.strokeWeight(3); p.stroke(0, 210, 255); p.beginShape();
+  for(let x=0; x<=L; x+=2) p.vertex(startX + x, cy + getEnv(x) * Math.cos(t) * 50);
+  p.endShape();
+
+  p.fill(255, 150); p.noStroke(); p.randomSeed(42); 
+  for(let i=0; i<300; i++) {
+    let baseX = p.random(0, L); let baseY = p.random(-50, 50);
+    let dispEnv = getEnv(baseX);
+    p.circle(startX + baseX + dispEnv * Math.cos(t) * 15, cy + baseY, 3);
+  }
+  
+  p.fill(255); p.textAlign(p.CENTER, p.TOP); p.textSize(12); p.textFont('Inter');
+  p.text(`Visualização: Pressão do Ar (Onda Estacionária Longitudinal)`, cx, cy + 90);
+  p.fill(150); 
+  p.text(`Harmônico ${params.harm} | Esq: Nó (Aberto) | Dir: ${type === 'AA' ? 'Nó (Aberto)' : 'Ventre (Fechado)'}`, cx, cy + 110);
+}
+
+function drawSpeakers(p) {
+  if (params.obsCircle) {
+    p.noFill(); p.stroke(255, 255, 255, 60); p.strokeWeight(1);
+    p.circle(p.width/2, p.height/2, params.obsRad * 2);
+
+    const cx = p.width/2; const cy = p.height/2;
+    const actives = speakers.filter(s => s.active);
+    const k = (2 * Math.PI) / params.lambda;
+    
+    for(let a=0; a<360; a+=2) { 
+      let rad = a * Math.PI / 180;
+      let x = cx + Math.cos(rad) * params.obsRad;
+      let y = cy + Math.sin(rad) * params.obsRad;
+      
+      let intensity = 0.5;
+      if (actives.length > 0) {
+        let sumCos = 0, sumSin = 0;
+        for (let s of actives) {
+          const d = Math.sqrt((x-s.x)**2 + (y-s.y)**2);
+          sumCos += Math.cos(k * d); sumSin += Math.sin(k * d);
+        }
+        intensity = (sumCos*sumCos + sumSin*sumSin) / (actives.length * actives.length);
+      }
+      
+      if (intensity > 0.9) {
+        p.stroke(0, 255, 100, 255); p.strokeWeight(3);
+        p.line(cx + Math.cos(rad)*params.obsRad, cy + Math.sin(rad)*params.obsRad,
+               cx + Math.cos(rad)*(params.obsRad+8), cy + Math.sin(rad)*(params.obsRad+8));
+      } else if (intensity < 0.1) {
+        p.stroke(255, 50, 50, 255); p.strokeWeight(3);
+        p.line(cx + Math.cos(rad)*(params.obsRad-4), cy + Math.sin(rad)*(params.obsRad-4),
+               cx + Math.cos(rad)*params.obsRad, cy + Math.sin(rad)*params.obsRad);
+      } else if (a % 15 === 0) {
+        p.stroke(255, 255, 255, 100); p.strokeWeight(1);
+        p.line(cx + Math.cos(rad)*params.obsRad, cy + Math.sin(rad)*params.obsRad,
+               cx + Math.cos(rad)*(params.obsRad+4), cy + Math.sin(rad)*(params.obsRad+4));
+      }
+    }
+  }
+
+  for (let s of speakers) {
+    p.push(); p.translate(s.x, s.y);
+    // Modo seguro desliga a pulsação frenética da UI
+    if (s.active && animating && !params.safeMode) {
+      let pulse = 0.5 + 0.5 * Math.sin(simTime * 10);
+      if (s.hasMusic && s.history) pulse = s.history[(s.histPtr - 1 + 300) % 300] * 3.0;
+      p.noFill(); p.stroke(0, 210, 255, 100 * pulse); p.strokeWeight(2);
+      p.circle(0, 0, 30 + pulse * 20);
+    }
+    p.fill(15, 17, 26);
+    let glowClr = p.color(0, 210, 255);
+    p.stroke(s.active ? glowClr : p.color(100)); p.strokeWeight(2);
+    if (s === draggingSpk) { p.stroke(255); p.scale(1.2); }
+    p.circle(0, 0, 24);
+    p.fill(s.active ? glowClr : p.color(100)); p.noStroke(); p.circle(0, 0, 8);
+    p.fill(255); p.textAlign(p.CENTER, p.BOTTOM); p.textSize(11); p.textFont('Inter');
+    p.text(s.name, 0, -18);
+    p.pop();
+  }
+}
+
+function drawDopplerSource(p) {
+  const sx = (simTime * params.mach * 200) % (p.width + 200) - 100;
+  const cy = p.height / 2;
+  
+  // Fonte
+  p.push(); p.translate(sx, cy);
+  p.stroke(139, 92, 246, 150); p.strokeWeight(2); p.line(0, 0, -30 * params.mach, 0);
+  p.fill(15, 17, 26); p.stroke(139, 92, 246); p.strokeWeight(2); p.circle(0, 0, 24);
+  p.fill(139, 92, 246); p.noStroke(); p.circle(0, 0, 8);
+  p.fill(255); p.textAlign(p.CENTER, p.BOTTOM); p.textSize(11);
+  p.text('v=' + params.mach.toFixed(2) + 'c', 0, -16);
+  p.pop();
+
+  // Observador
+  const M = params.mach;
+  const dx = dopplerObs.x - sx;
+  const dy = dopplerObs.y - cy;
+  const d = Math.max(1, Math.sqrt(dx*dx + dy*dy)); // Evita divisao por zero
+  const cosTheta = dx / d; // Componente na direção do movimento (positivo = aproximando)
+
+  // Frequência base simulada
+  const f_base = 440;
+  let f_obs_text = "";
+  
+  // Fórmula Doppler geral para fonte móvel: f' = f / (1 - M * cos(theta))
+  let denom = 1 - M * cosTheta;
+  
+  if (denom <= 0.05) {
+    f_obs_text = "💥 BOOM SÔNICO!";
+  } else {
+    let f_obs = f_base / denom;
+    f_obs_text = `f' = ${Math.round(f_obs)} Hz`;
+  }
+
+  p.push(); p.translate(dopplerObs.x, dopplerObs.y);
+  p.fill(239, 68, 68, draggingObs ? 100 : 40);
+  p.noStroke();
+  p.circle(0, 0, 35);
+  p.fill(15, 17, 26); p.stroke(239, 68, 68); p.strokeWeight(2);
+  p.circle(0, 0, 16);
+  p.fill(239, 68, 68); p.noStroke();
+  p.circle(0, 0, 6);
+  
+  p.fill(255); p.textAlign(p.CENTER, p.BOTTOM); p.textSize(12); p.textFont('JetBrains Mono');
+  p.text("Observador", 0, -22);
+  
+  p.fill(255, 200, 0); p.textAlign(p.CENTER, p.TOP); p.textSize(13); p.fontWeight = "bold";
+  p.text(f_obs_text, 0, 12);
+  
+  // Linha de Visão (opcional)
+  p.stroke(255, 255, 255, 40); p.strokeWeight(1); p.drawingContext.setLineDash([4, 4]);
+  p.line(0, 0, -dx, -dy);
+  p.pop();
+}
+
+new p5(sketch);
+</script>
+</body>
+</html>
